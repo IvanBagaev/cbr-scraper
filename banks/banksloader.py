@@ -48,20 +48,24 @@ class BanksLoader:
 
         self.closed_banks = self._get_closing_info(first_page)
 
+        print('Total pages %d' % len(all_pages))
         counter = 1
         for page_url in all_pages[:2]:
-            print('\rProcessed %d of %d...' % (counter, len(all_pages)+1), end='')
+            print('\r\tProcessed %d page of %d...' % (counter, len(all_pages)+1), end='')
             closed_banks = pd.concat([self.closed_banks, self._get_closing_info(page_url)])
             counter+=1
 
         self.closed_banks.columns = ['index', 'bank', 'license_number', 'reason_of_closing', 'date_of_closing', 'city','link']
 
-        # Load descriptions of closed banks
 
+        print('Loading descriptions for closed banks...')
         self.closed_descriptions = pd.DataFrame()
+        counter = 1
         for bank in self.closed_banks.itertuples(index=False):
+            print('\r\tProcessed %d page of %d...' % (counter, len(closed_banks)+1), end='')
             url = 'http://www.banki.ru/'+ bank.link
             self.closed_descriptions = pd.concat([self.closed_descriptions,self._get_description(url)])
+            counter+=1
 
         return self
 
@@ -82,16 +86,69 @@ class BanksLoader:
         cbr_bank_list_df['№'] = ids
         cbr_bank_list_df.columns = ['id', 'license_number', 'name']
 
-        self.active banks = cbr_bank_list_df
+        self.active_banks = cbr_bank_list_df
 
         return self
 
-    def load_form(self, form_number, bank_list):
+    def load_forms(self, first_n):
+        """
+        Load first N forms for each bank.
 
-        pass
+        """
+        if self.closed_descriptions is None or self.active_banks:
+            raise ValueError('Banks should be loaded first!')
+
+        banks_main_info = pd.DataFrame()
+        form_101 = pd.DataFrame()
+        form_102 = pd.DataFrame()
+        form_123 = pd.DataFrame()
+        form_134 = pd.DataFrame()
+        form_135 = pd.DataFrame()
+
+        forms = [form_101, form_102, form_123, form_134, form_135]
+
+        counter = 1
+        total_spent = 0
+
+        for bank in self.active_banks_list.extend(self.closed_banks_list):
+            start_time = time.time()
+
+            print("{0} of {1} \t{2} - {3}.".format(counter,
+                                                  len(cbr_bank_list),
+                                                  bank.bank_id, bank.name), end=' ')
+
+            # TODO: DRY
+
+            print('Form 101...', end = ' ')
+            f_101 = bank.get_form101(first_n)
+            form_101 = pd.concat([form_101,f_101])
+
+            print('Form 102...', end = ' ')
+            f_102 = bank.get_form102(first_n)
+            form_102 = pd.concat([form_102,f_102])
+
+            print('Form 123...', end = ' ')
+            f_123 = bank.get_form123(first_n)
+            form_123 = pd.concat([form_123,f_123])
+
+            print('Form 134...', end = ' ')
+            f_134 = bank.get_form123(first_n,'f_134')
+            form_134 = pd.concat([form_134,f_134])
+
+            print('Form 135...', end = ' ')
+            f_135 = bank.get_form135(first_n)
+            form_135 = pd.concat([form_135,f_135])
+
+            total_spent += time.time()-start_time
+            print('. Time spent - %d sec.' % (time.time()-start_time))
+            counter += 1
+
+        print('Total spent - %d sec' % total_spent)
+
+        return banks_main_info, forms
 
     @property
-    def closed_list(self):
+    def closed_banks_list(self):
         """Returns list of Closed Bank class instances"""
 
         if self.closed_descriptions is None:
@@ -100,7 +157,7 @@ class BanksLoader:
         return [Bank(bank.index, bank.license_number, bank.full_name)
                     for bank in self.closed_descriptions.itertuples(index=False)]
     @property
-    def active_list(self):
+    def active_banks_list(self):
         """Returns list of Active Bank class instances"""
 
         if self.active_banks is None:
