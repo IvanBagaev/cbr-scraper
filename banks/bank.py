@@ -12,9 +12,18 @@ BANK_PAGE_URL_PATTERN = "http://www.cbr.ru/credit/coinfo.asp?id=%s"
 class Bank:
     """
 
+
+    Parameters
+    ----------
+    bank_id :
+        ID on cbr.ru. Must be correct.
+    license_number :
+        Licence number. Must be correct
+    name : str
+        Name of bank. can be in free format.
     """
 
-    def __init__(self, bank_id, license_number,name):
+    def __init__(self, bank_id, license_number,name="Unknown"):
         self.name = name
         self.bank_id = bank_id
         self.license_number = license_number
@@ -71,6 +80,12 @@ class Bank:
         if f_101 is None:
             return pd.DataFrame()
 
+        # Get list of reporting dates
+        dates = []
+        for el in f_101.find('div',{'class':'switched'}).findAll('div',{'class':'normal'}):
+            year = el['id'][-4:]
+            dates.extend([dtparser.parse(a.text[3:] + ' ' + year) for a in el.findAll('a')])
+
         urls = [('http://www.cbr.ru/credit/'+a['href']) for a in f_101.findAll('a')]
 
         if first_n is None:
@@ -78,13 +93,9 @@ class Bank:
 
         f_101 = pd.DataFrame()
 
-        for url in urls[:first_n]:
+        for url, date in zip(urls[:first_n], dates):
             page = urlopen(url).read()
             soup = BeautifulSoup(page,'html.parser')
-
-            content= soup.find('div',{'id':'content'})
-            start_date = content.text.find('состоянию на') + 13
-            date = dtparser.parse(content.text[start_date:content.text.find('г.',start_date)])
 
             # For two case of form view
             if 'Код' in soup.find('h2').text:

@@ -11,6 +11,10 @@ class ClosedBanks:
     Parse closed banks data from banki.ru
     """
 
+    def __init__(self):
+        self.closed_descriptions = None
+        self.closed_banks = None
+
     def _get_closing_info(self, url):
         """Gather info about closed banks from a single page"""
         page = urlopen(url).read()
@@ -35,7 +39,7 @@ class ClosedBanks:
                               'reason_extended', 'index']
         return description
 
-    def __init__(self):
+    def load_closed(self):
 
         # Load list of closed banks
         first_page = 'http://www.banki.ru/banks/memory/'
@@ -53,12 +57,57 @@ class ClosedBanks:
 
         # Load descriptions of closed banks
 
-        self.bank_descriptions = pd.DataFrame()
+        self.closed_descriptions = pd.DataFrame()
         for bank in self.closed_banks.itertuples(index=False):
             url = 'http://www.banki.ru/'+ bank.link
-            self.bank_descriptions = pd.concat([self.bank_descriptions,self._get_description(url)])
+            self.closed_descriptions = pd.concat([self.closed_descriptions,self._get_description(url)])
 
-    def as_bank(self):
-        """Return list of Bank class instances"""
-        return [Bank(bank['index'], bank['license_number'], bank['full_name'])
-                    for bank in self.bank_descriptions.itertuples(index=False)]
+        return self
+
+    def load_active(self):
+        cbr_bank_list_url = 'http://www.cbr.ru/credit/transparent.asp'
+
+        page = urlopen(cbr_bank_list_url).read()
+
+        cbr_bank_list_df = pd.read_html(page)[0]
+        cbr_bank_list_df.drop([4,5,6],axis=1, inplace=True)
+        cbr_bank_list_df.columns = cbr_bank_list_df.ix[0]
+        cbr_bank_list_df.drop([0,1],axis=0, inplace=True)
+        cbr_bank_list_df.drop(['Раскрытие информации'],axis=1, inplace=True)
+
+        text = str(BeautifulSoup(page,'html.parser').find('table'))
+        ids = re.findall('javascript:info\((.+?)\)', text)
+
+        cbr_bank_list_df['№'] = ids
+        cbr_bank_list_df.columns = ['id', 'license_number', 'name']
+
+
+        cbr_bank_list = [Bank(bank.id,bank.license_number,bank.name)
+                         for bank in cbr_bank_list_df.itertuples(index=False)]
+
+        self.data_frame = cbr_bank_list_df
+        self.bank_list = cbr_bank_list
+
+        return self
+
+    def load_form(self, form_number, bank_list=self.BankList):
+        pass
+
+    @property
+    def closed_list(self):
+        """Returns list of Bank class instances"""
+
+        if self.closed_descriptions is None:
+            raise ValueError('Bank descriptions should be loaded first!')
+
+        return [Bank(bank.index, bank.license_number, bank.full_name)
+                    for bank in self.closed_descriptions.itertuples(index=False)]
+    @property
+    def active_list(self):
+        """Returns list of Bank class instances"""
+
+        if self.closed_descriptions is None:
+            raise ValueError('Bank descriptions should be loaded first!')
+
+        return [Bank(bank.index, bank.license_number, bank.full_name)
+                    for bank in self.closed_descriptions.itertuples(index=False)]
