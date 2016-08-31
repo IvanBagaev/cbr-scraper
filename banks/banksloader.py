@@ -6,7 +6,7 @@ from urllib.request import urlopen
 from .bank import Bank
 
 
-class ClosedBanks:
+class BanksLoader:
     """
     Parse closed banks data from banki.ru
     """
@@ -14,6 +14,7 @@ class ClosedBanks:
     def __init__(self):
         self.closed_descriptions = None
         self.closed_banks = None
+        self.active_banks = None
 
     def _get_closing_info(self, url):
         """Gather info about closed banks from a single page"""
@@ -81,33 +82,29 @@ class ClosedBanks:
         cbr_bank_list_df['№'] = ids
         cbr_bank_list_df.columns = ['id', 'license_number', 'name']
 
-
-        cbr_bank_list = [Bank(bank.id,bank.license_number,bank.name)
-                         for bank in cbr_bank_list_df.itertuples(index=False)]
-
-        self.data_frame = cbr_bank_list_df
-        self.bank_list = cbr_bank_list
+        self.active banks = cbr_bank_list_df
 
         return self
 
-    def load_form(self, form_number, bank_list=self.BankList):
+    def load_form(self, form_number, bank_list):
+
         pass
 
     @property
     def closed_list(self):
-        """Returns list of Bank class instances"""
+        """Returns list of Closed Bank class instances"""
 
         if self.closed_descriptions is None:
-            raise ValueError('Bank descriptions should be loaded first!')
+            raise ValueError('Closed banks should be loaded first!')
 
         return [Bank(bank.index, bank.license_number, bank.full_name)
                     for bank in self.closed_descriptions.itertuples(index=False)]
     @property
     def active_list(self):
-        """Returns list of Bank class instances"""
+        """Returns list of Active Bank class instances"""
 
-        if self.closed_descriptions is None:
-            raise ValueError('Bank descriptions should be loaded first!')
+        if self.active_banks is None:
+            raise ValueError('Active banks should be loaded first!')
 
-        return [Bank(bank.index, bank.license_number, bank.full_name)
-                    for bank in self.closed_descriptions.itertuples(index=False)]
+        return [Bank(bank.id,bank.license_number,bank.name)
+                    for bank in self.active_banks.itertuples(index=False)]
