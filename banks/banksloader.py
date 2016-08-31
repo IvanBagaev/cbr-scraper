@@ -1,3 +1,5 @@
+import re
+
 import pandas as pd
 
 from bs4 import BeautifulSoup
@@ -31,9 +33,17 @@ class BanksLoader:
         bank_description = BeautifulSoup(page,'html.parser').find('dl')
         description = pd.DataFrame(data = [' '.join(dt.text.split()) for dt in bank_description.findAll('dd')],
                                   index=[' '.join(dt.text.split()) for dt in bank_description.findAll('dt')]).T
-        description['index'] = bank_description.find('a')['href'][bank_description.find('a')['href'].find('=')+1:]
+
+        if len(description.columns) == 5:
+            description['reason of closing'] = ""
+
+        try:
+            description['index'] = bank_description.find('a')['href'][bank_description.find('a')['href'].find('=')+1:]
+        except TypeError:
+            description['index'] = -1
 
         description['Номер лицензии'] = description['Номер лицензии'].map(lambda x: x.split()[0])
+        print(description.columns)
 
         description.columns = ['full_name', 'city',
                               'license_number', 'reason_of_closing', 'date_of_closing',
@@ -48,22 +58,23 @@ class BanksLoader:
 
         self.closed_banks = self._get_closing_info(first_page)
 
-        print('Total pages %d' % len(all_pages))
         counter = 1
-        for page_url in all_pages[:2]:
-            print('\r\tProcessed %d page of %d...' % (counter, len(all_pages)+1), end='')
-            closed_banks = pd.concat([self.closed_banks, self._get_closing_info(page_url)])
+        print('\nLoading closed banks...')
+        for page_url in all_pages:
+            print('\rProcessed %d page of %d...' % (counter, len(all_pages)+1), end='')
+            self.closed_banks = pd.concat([self.closed_banks, self._get_closing_info(page_url)])
             counter+=1
 
         self.closed_banks.columns = ['index', 'bank', 'license_number', 'reason_of_closing', 'date_of_closing', 'city','link']
 
 
-        print('Loading descriptions for closed banks...')
+        print('\nLoading descriptions for closed banks...')
         self.closed_descriptions = pd.DataFrame()
         counter = 1
-        for bank in self.closed_banks.itertuples(index=False):
-            print('\r\tProcessed %d page of %d...' % (counter, len(closed_banks)+1), end='')
+        for bank in self.closed_banks.iloc[740:].itertuples(index=False):
+            print('\rProcessed %d  of %d...' % (counter, len(self.closed_banks)+1), end='')
             url = 'http://www.banki.ru/'+ bank.link
+            print(url)
             self.closed_descriptions = pd.concat([self.closed_descriptions,self._get_description(url)])
             counter+=1
 
@@ -155,7 +166,8 @@ class BanksLoader:
             raise ValueError('Closed banks should be loaded first!')
 
         return [Bank(bank.index, bank.license_number, bank.full_name)
-                    for bank in self.closed_descriptions.itertuples(index=False)]
+                    for bank in self.closed_descriptions.itertuples(index=False)
+                        if bank.index > 0]
     @property
     def active_banks_list(self):
         """Returns list of Active Bank class instances"""
