@@ -1,7 +1,9 @@
 import re
+import os
+
+from multiprocessing import Pool, cpu_count
 
 import pandas as pd
-
 from bs4 import BeautifulSoup
 from urllib.request import urlopen
 
@@ -14,6 +16,7 @@ class BanksLoader:
     """
 
     def __init__(self):
+
         self.closed_banks = None
         self.active_banks = None
 
@@ -53,17 +56,20 @@ class BanksLoader:
         # Load list of closed banks
         first_page = 'http://www.banki.ru/banks/memory/'
         all_pages = [(first_page + '?PAGEN_1=%d') % x for x in range(2,51)]
-
-        closed_banks = self._get_closing_info(first_page)
+        all_pages.insert(0, first_page)
 
         counter = 1
         print('\nLoading closed banks...')
-        for page_url in all_pages:
-            print('\rProcessed %d page of %d...' % (counter, len(all_pages)+1), end='')
-            closed_banks = pd.concat([closed_banks, self._get_closing_info(page_url)])
-            counter+=1
 
-        closed_banks.columns = ['index', 'bank', 'license_number', 'reason_of_closing', 'date_of_closing', 'city','link']
+        n = cpu_count()
+        print("Pool size:",n)
+
+        with Pool(n) as pool:
+            results = pool.map(self._get_closing_info,all_pages) # chunksize
+
+        self.closed_banks = pd.concat(results)
+        self.closed_banks.columns = ['index', 'bank', 'license_number',
+                                     'reason_of_closing', 'date_of_closing', 'city','link']
 
 
         print('\nLoading descriptions for closed banks...')
@@ -72,8 +78,8 @@ class BanksLoader:
                                                        'reason_extended', 'index'])
 
         counter = 1
-        for bank in closed_banks.itertuples(index=False):
-            print('\rProcessed %d  of %d...' % (counter, len(closed_banks)+1), end='')
+        for bank in self.closed_banks.itertuples(index=False):
+            print('\rProcessed %d  of %d...' % (counter, len(self.closed_banks)+1), end='')
             url = 'http://www.banki.ru/'+ bank.link
 
             closed_descriptions = closed_descriptions.append(
@@ -81,9 +87,15 @@ class BanksLoader:
                 ignore_index=True)
             counter+=1
 
-        self.closed_banks = closed_banks.merge(
-            closed_descriptions['full_name','reason_of_closing','reason_extended','index'],
-            on='license_number')
+
+        closed_descriptions.drop(['city','date_of_closing','reason_of_closing'],
+                                 axis=1, inplace=True)
+        print (closed_descriptions.columns)
+
+        self.closed_banks = self.closed_banks.merge(
+            closed_descriptions,
+            on='license_number'
+            )
 
         return self
 
@@ -109,13 +121,14 @@ class BanksLoader:
 
         return self
 
-    #def to
+    def to_csv(self, path='../'):
+        self.closed_banks.to_csv(os.path.join(path,'closed_banks.csv'))
+        self.active_banks.to_csv(os.path.join(path,'active_banks.csv'))
 
-    def load_closed_from_csv(self, closed_path, descriptions_path):
+    def load_closed_from_csv(self, closed_path):
         """Allow to load closed banks DataFrame from csv"""
         if active_path is None:
             raise AttributeError("You should specify path to csv first.")
-        self.closed_descriptions = pd.read_csv(descriptions_path)
         self.closed_banks = pd.read_csv(closed_path)
         return self
 
@@ -133,7 +146,7 @@ class BanksLoader:
         Load first N forms for each bank.
 
         """
-        if self.closed_descriptions is None or self.active_banks is None:
+        if self.closed_banks is None or self.active_banks is None:
             raise ValueError('Banks should be loaded first!')
 
         banks_main_info = pd.DataFrame()
@@ -186,12 +199,13 @@ class BanksLoader:
     def closed_banks_list(self):
         """Returns list of Closed Bank class instances"""
 
-        if self.closed_descriptions is None:
+        if self.closed_banks is None:
             raise ValueError('Closed banks should be loaded first!')
 
         return [Bank(bank.index, bank.license_number, bank.full_name)
-                    for bank in self.closed_descriptions.itertuples(index=False)
+                    for bank in self.closed_banks.itertuples(index=False)
                         if bank.index > 0]
+
     @property
     def active_banks_list(self):
         """Returns list of Active Bank class instances"""
