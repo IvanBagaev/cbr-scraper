@@ -10,7 +10,7 @@ from urllib.request import urlopen
 from .bank import Bank
 
 
-class BanksLoader:
+class BanksScrapper:
     """
     Scrap closed banks data from banki.ru
     """
