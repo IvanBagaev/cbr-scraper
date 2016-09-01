@@ -14,7 +14,6 @@ class BanksLoader:
     """
 
     def __init__(self):
-        self.closed_descriptions = None
         self.closed_banks = None
         self.active_banks = None
 
@@ -31,10 +30,11 @@ class BanksLoader:
         """Returns description for a single bank from it's memory page"""
         page = urlopen(url).read()
         bank_description = BeautifulSoup(page,'html.parser').find('dl')
-        description = pd.DataFrame(data = [' '.join(dt.text.split()) for dt in bank_description.findAll('dd')],
-                                  index=[' '.join(dt.text.split()) for dt in bank_description.findAll('dt')]).T
+        description = pd.DataFrame(
+            data = [' '.join(dt.text.split()) for dt in bank_description.findAll('dd')],
+            index=[' '.join(dt.text.split()) for dt in bank_description.findAll('dt')]).T
 
-        if len(description.columns) == 5:
+        if len(description.columns) <= 5:
             description['reason of closing'] = ""
 
         try:
@@ -43,8 +43,6 @@ class BanksLoader:
             description['index'] = -1
 
         description['Номер лицензии'] = description['Номер лицензии'].map(lambda x: x.split()[0])
-        print(description.columns)
-
         description.columns = ['full_name', 'city',
                               'license_number', 'reason_of_closing', 'date_of_closing',
                               'reason_extended', 'index']
@@ -56,29 +54,39 @@ class BanksLoader:
         first_page = 'http://www.banki.ru/banks/memory/'
         all_pages = [(first_page + '?PAGEN_1=%d') % x for x in range(2,51)]
 
-        self.closed_banks = self._get_closing_info(first_page)
+        closed_banks = self._get_closing_info(first_page)
 
         counter = 1
         print('\nLoading closed banks...')
         for page_url in all_pages:
             print('\rProcessed %d page of %d...' % (counter, len(all_pages)+1), end='')
-            self.closed_banks = pd.concat([self.closed_banks, self._get_closing_info(page_url)])
+            closed_banks = pd.concat([closed_banks, self._get_closing_info(page_url)])
             counter+=1
 
-        self.closed_banks.columns = ['index', 'bank', 'license_number', 'reason_of_closing', 'date_of_closing', 'city','link']
+        closed_banks.columns = ['index', 'bank', 'license_number', 'reason_of_closing', 'date_of_closing', 'city','link']
 
 
         print('\nLoading descriptions for closed banks...')
-        self.closed_descriptions = pd.DataFrame()
+        closed_descriptions = pd.DataFrame(columns = ['full_name', 'city','license_number',
+                                                       'reason_of_closing', 'date_of_closing',
+                                                       'reason_extended', 'index'])
+
         counter = 1
-        for bank in self.closed_banks.iloc[740:].itertuples(index=False):
-            print('\rProcessed %d  of %d...' % (counter, len(self.closed_banks)+1), end='')
+        for bank in closed_banks.itertuples(index=False):
+            print('\rProcessed %d  of %d...' % (counter, len(closed_banks)+1), end='')
             url = 'http://www.banki.ru/'+ bank.link
-            print(url)
-            self.closed_descriptions = pd.concat([self.closed_descriptions,self._get_description(url)])
+
+            closed_descriptions = closed_descriptions.append(
+                self._get_description(url),
+                ignore_index=True)
             counter+=1
 
+        self.closed_banks = closed_banks.merge(
+            closed_descriptions['full_name','reason_of_closing','reason_extended','index'],
+            on='license_number')
+
         return self
+
 
     def load_active(self):
         cbr_bank_list_url = 'http://www.cbr.ru/credit/transparent.asp'
@@ -101,12 +109,31 @@ class BanksLoader:
 
         return self
 
+    #def to
+
+    def load_closed_from_csv(self, closed_path, descriptions_path):
+        """Allow to load closed banks DataFrame from csv"""
+        if active_path is None:
+            raise AttributeError("You should specify path to csv first.")
+        self.closed_descriptions = pd.read_csv(descriptions_path)
+        self.closed_banks = pd.read_csv(closed_path)
+        return self
+
+    def load_active_from_csv(self, active_path):
+        """
+        Allow to load active banks DataFrame from csv.
+        """
+        if active_path is None:
+            raise AttributeError("You should specify path to csv first.")
+        self.active_banks = pd.read_csv(active_path)
+
+
     def load_forms(self, first_n):
         """
         Load first N forms for each bank.
 
         """
-        if self.closed_descriptions is None or self.active_banks:
+        if self.closed_descriptions is None or self.active_banks is None:
             raise ValueError('Banks should be loaded first!')
 
         banks_main_info = pd.DataFrame()
@@ -127,9 +154,7 @@ class BanksLoader:
             print("{0} of {1} \t{2} - {3}.".format(counter,
                                                   len(cbr_bank_list),
                                                   bank.bank_id, bank.name), end=' ')
-
             # TODO: DRY
-
             print('Form 101...', end = ' ')
             f_101 = bank.get_form101(first_n)
             form_101 = pd.concat([form_101,f_101])
@@ -153,7 +178,6 @@ class BanksLoader:
             total_spent += time.time()-start_time
             print('. Time spent - %d sec.' % (time.time()-start_time))
             counter += 1
-
         print('Total spent - %d sec' % total_spent)
 
         return banks_main_info, forms
