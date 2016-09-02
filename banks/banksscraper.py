@@ -1,5 +1,6 @@
 import re
 import os
+import time
 
 from multiprocessing import Pool, cpu_count
 
@@ -10,13 +11,14 @@ from urllib.request import urlopen
 from .bank import Bank
 
 
-class BanksScrapper:
+class BanksScraper:
     """
     Scrap closed banks data from banki.ru
     """
 
     def __init__(self):
-
+        self._n = cpu_count()
+        print("Pool size:",self._n)
         self.closed_banks = None
         self.active_banks = None
 
@@ -38,11 +40,6 @@ class BanksScrapper:
             data = [' '.join(dt.text.split()) for dt in bank_description.findAll('dd')],
             index=[' '.join(dt.text.split()) for dt in bank_description.findAll('dt')]).T
 
-        """if len(description.columns) == 5:
-            description['reason of closing'] = ""
-        elif len(description.columns) == 4:
-            description['city'] = """""
-
         try:
             description['index'] = bank_description.find('a')['href'][bank_description.find('a')['href'].find('=')+1:]
         except TypeError:
@@ -52,90 +49,92 @@ class BanksScrapper:
 
         return description
 
-    def load_closed(self):
+    def get_banks(self):
+        """
+        Allow to download bank's data.
 
-        # Load list of closed banks
-        first_page = 'http://www.banki.ru/banks/memory/'
-        all_pages = [(first_page + '?PAGEN_1=%d') % x for x in range(2,51)]
-        all_pages.insert(0, first_page)
+        """
+        start_time = time.time()
+        print('Loading active banks...')
 
-        n = cpu_count()
-        print("Pool size:",n)
+        # First: scraping active banks list from cbr.ru
+        page = urlopen('http://www.cbr.ru/credit/transparent.asp').read()
 
-        print('\nLoading closed banks...')
-        with Pool(processes=n) as pool:
-            results = pool.map(self._get_closing_info,all_pages, chunksize=10) # chunksize
-
-        self.closed_banks = pd.concat(results)
-        self.closed_banks.columns = ['index', 'bank', 'license_number',
-                                     'reason_of_closing', 'date_of_closing', 'city','link']
-
-
-        print('\nLoading descriptions for %d closed banks...Wait a while!' % len(self.closed_banks))
-        closed_descriptions = pd.DataFrame(columns = ['full_name', 'city','license_number',
-                                                       'reason_of_closing', 'date_of_closing',
-                                                       'reason_extended', 'index'])
-
-        with Pool(processes=n) as pool:
-            results = pool.map(
-                self._get_description,
-                (bank.link for bank in self.closed_banks.itertuples(index=False)),
-                chunksize=200
-                )
-
-        closed_descriptions.columns = ['full_name', 'city',
-                                      'license_number', 'reason_of_closing', 'date_of_closing',
-                                      'reason_extended', 'index']
-        closed_descriptions = pd.concat(results).drop(
-            ['city','date_of_closing','reason_of_closing'], axis =1)
-
-        self.closed_banks = self.closed_banks.merge(
-            closed_descriptions,
-            on='license_number'
-            )
-
-        return self
-
-
-    def load_active(self):
-        cbr_bank_list_url = 'http://www.cbr.ru/credit/transparent.asp'
-
-        page = urlopen(cbr_bank_list_url).read()
-
+        ## Cleaning up in taken table
         cbr_bank_list_df = pd.read_html(page)[0]
         cbr_bank_list_df.drop([4,5,6],axis=1, inplace=True)
         cbr_bank_list_df.columns = cbr_bank_list_df.ix[0]
         cbr_bank_list_df.drop([0,1],axis=0, inplace=True)
         cbr_bank_list_df.drop(['Раскрытие информации'],axis=1, inplace=True)
 
+        ### Parse bank's ids
         text = str(BeautifulSoup(page,'html.parser').find('table'))
         ids = re.findall('javascript:info\((.+?)\)', text)
-
         cbr_bank_list_df['№'] = ids
         cbr_bank_list_df.columns = ['id', 'license_number', 'name']
-
         self.active_banks = cbr_bank_list_df
 
+        print('\nLoading closed banks...')
+
+        # Load list of closed banks
+        first_page = 'http://www.banki.ru/banks/memory/'
+        all_pages = [(first_page + '?PAGEN_1=%d') % x for x in range(2,51)]
+        all_pages.insert(0, first_page)
+
+        # First: scrapping closed banks from ~50 pages on banki.ru
+        with Pool(processes=n) as pool:
+            results = pool.map(
+                self._get_closing_info,
+                all_pages
+                )
+
+        ## Cleaning up
+        self.closed_banks = pd.concat(results)
+        self.closed_banks.columns = ['index', 'bank', 'license_number',
+                                     'reason', 'date_of_closing', 'city','link']
+        self.closed_banks.drop('index', axis=1, inplace=True)
+
+        ### scrapping bank's descriptions from memory book on banki.ru
+        print('\nLoading descriptions for %d closed banks...''Wait a while!' % len(self.closed_banks))
+        with Pool(processes=self._n) as pool:
+            results = pool.map(
+                self._get_description,
+                (bank.link for bank in self.closed_banks.itertuples(index=False))
+                )
+
+        #### Cleaning up
+        closed_descriptions = pd.concat(results).fillna("")
+        closed_descriptions.columns = ['index',  'city','date_of_closing',
+                                       'name', 'license_number', 'full_name','reason',
+                                       'reason_of_closing', 'reason_of_closing2', ]
+        closed_descriptions['name'] = closed_descriptions['full_name'] + \
+                                      closed_descriptions['name']
+        closed_descriptions['reason_of_closing'] = closed_descriptions['reason_of_closing'] + \
+                                                   closed_descriptions['reason_of_closing2']
+        closed_descriptions.drop(['full_name', 'reason_of_closing2',
+                                  'city','date_of_closing','reason'],
+                                 axis=1, inplace=True)
+
+        ##### Merge downloaded dataframes into one
+        self.closed_banks = self.closed_banks.merge(
+            closed_descriptions,
+            on='license_number'
+            )
+
+        print('Done! Time spent: %d sec.' % time.time()-start_time)
+
         return self
+
 
     def to_csv(self, path='../'):
         self.closed_banks.to_csv(os.path.join(path,'closed_banks.csv'))
         self.active_banks.to_csv(os.path.join(path,'active_banks.csv'))
 
-    def load_closed_from_csv(self, closed_path):
-        """Allow to load closed banks DataFrame from csv"""
-        if active_path is None:
-            raise AttributeError("You should specify path to csv first.")
-        self.closed_banks = pd.read_csv(closed_path)
+    def from_csv(self, path='../'):
+        """Allow to load banks DataFrame from csv"""
+        self.closed_banks = pd.read_csv(os.path.join(path,'closed_banks.csv'))
+        self.active_banks = pd.read_csv(os.path.join(path,'closed_banks.csv'))
         return self
-
-    def load_active_from_csv(self, active_path):
-        """
-        Allow to load active banks DataFrame from csv.
-        """
-        if active_path is None:
-            raise AttributeError("You should specify path to csv first.")
-        self.active_banks = pd.read_csv(active_path)
 
 
     def load_forms(self, first_n):
