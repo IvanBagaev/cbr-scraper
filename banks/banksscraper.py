@@ -82,7 +82,7 @@ class BanksScraper:
         all_pages.insert(0, first_page)
 
         # First: scrapping closed banks from ~50 pages on banki.ru
-        with Pool(processes=n) as pool:
+        with Pool(processes=self._n) as pool:
             results = pool.map(
                 self._get_closing_info,
                 all_pages
