@@ -24,7 +24,7 @@ class BankScraper:
         """Gather info about closed banks from a single page"""
         page = urlopen(url).read()
         closed_banks = pd.read_html(page)[2]
-        closed_banks['link'] = pd.Series([a['href'] for a in BeautifulSoup(page, 'html.parser').\
+        closed_banks['link'] = pd.Series([a['href'] for a in BeautifulSoup(page, 'lxml').\
                                        findAll('table')[2].find('tbody').findAll('a')])
         return closed_banks
 
@@ -33,7 +33,7 @@ class BankScraper:
         """Returns description for a single bank from it's memory page"""
         url = 'http://www.banki.ru'+ bank_url
         page = urlopen(url).read()
-        bank_description = BeautifulSoup(page,'html.parser').find('dl')
+        bank_description = BeautifulSoup(page,'lxml').find('dl')
         description = pd.DataFrame(
             data = [' '.join(dt.text.split()) for dt in bank_description.findAll('dd')],
             index=[' '.join(dt.text.split()) for dt in bank_description.findAll('dt')]).T
@@ -66,14 +66,14 @@ class BankScraper:
         cbr_bank_list_df.drop(['Раскрытие информации'],axis=1, inplace=True)
 
         ### Parse bank's ids
-        text = str(BeautifulSoup(page,'html.parser').find('table'))
+        text = str(BeautifulSoup(page,'lxml').find('table'))
         ids = re.findall('javascript:info\((.+?)\)', text)
         cbr_bank_list_df['№'] = ids
         cbr_bank_list_df.columns = ['id', 'license_number', 'name']
         self.active_banks = cbr_bank_list_df
-
+        print('Done! Time spent: %d sec.' % (time.time()-start_time))
         print('\nLoading closed banks...')
-
+        start_time = time.time()
         # Load list of closed banks
         first_page = 'http://www.banki.ru/banks/memory/'
         all_pages = [(first_page + '?PAGEN_1=%d') % x for x in range(2,51)]
@@ -84,24 +84,25 @@ class BankScraper:
             results = pool.map(
                 self._get_closing_info,
                 all_pages,
-                chunksize=12,
+                #chunksize=int(len(all_pages)/self._n),
                 )
 
         ## Cleaning up
         self.closed_banks = pd.concat(results)
         self.closed_banks.columns = ['index', 'bank', 'license_number',
                                      'reason', 'date_of_closing', 'city','link']
-        self.closed_banks.drop('index', axis=1, inplace=True)
-
+        self.closed_banks = self.closed_banks.drop('index', axis=1).drop_duplicates('license_number')
+        print(self.closed_banks.shape)
+        print('Done! Time spent: %d sec.' % (time.time()-start_time))
+        start_time = time.time()
         ### scrapping bank's descriptions from memory book on banki.ru
         print('\nLoading descriptions for %d closed banks...''Wait a while!' % len(self.closed_banks))
         with Pool(processes=self._n) as pool:
             results = pool.map(
                 self._get_description,
                 (bank.link for bank in self.closed_banks.itertuples(index=False)),
-                chunksize=250,
+                #chunksize=int(len(self.closed_banks)/self._n),
                 )
-
         #### Cleaning up
         closed_descriptions = pd.concat(results).fillna("")
         closed_descriptions.columns = ['id',  'city','date_of_closing',
@@ -111,16 +112,21 @@ class BankScraper:
                                       closed_descriptions['name']
         closed_descriptions['reason_of_closing'] = closed_descriptions['reason_of_closing'] + \
                                                    closed_descriptions['reason_of_closing2']
-        closed_descriptions.drop(['full_name', 'reason_of_closing2',
-                                  'city','date_of_closing','reason'],
-                                 axis=1, inplace=True)
+        closed_descriptions = closed_descriptions.drop(
+            ['full_name', 'reason_of_closing2','city','date_of_closing','reason'],
+            axis=1).drop_duplicates('license_number')
 
+        print(closed_descriptions.shape)
+        #return closed_descriptions, self.closed_banks
         ##### Merge downloaded dataframes into one
+        self.closed_banks.license_number = self.closed_banks.license_number.map(lambda x: str(x))
+        closed_descriptions.license_number = closed_descriptions.license_number.map(lambda x: str(x))
+
         self.closed_banks = self.closed_banks.merge(
             closed_descriptions,
-            on='license_number'
+            on='license_number',
             )
-
+        print(self.closed_banks.shape)
         print('Done! Time spent: %d sec.' % (time.time()-start_time))
 
         return self
