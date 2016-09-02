@@ -9,6 +9,9 @@ from .utils import to_number
 
 BANK_PAGE_URL_PATTERN = "http://www.cbr.ru/credit/coinfo.asp?id=%s"
 
+
+
+
 class Bank:
     """
 
@@ -63,6 +66,13 @@ class Bank:
         return main_info
 
 
+    def _find_form(self, form_name):
+        """name in f_xxx format. For example f_101, f_102 etc."""
+        soup = self._open_bank_page()
+        reports =  soup.find('div' , {'class':'reports'})
+        form = reports.find('div', {'id':form_name})
+        return soup, form
+
     def get_form101(self, first_n = None):
         """
         ...
@@ -72,11 +82,8 @@ class Bank:
 
 
         """
-        soup = self._open_bank_page()
-
-        reports =  soup.find('div' , {'class':'reports'})
-        f_101 = reports.find('div', {'id':'f_101'})
-
+        soup, f_101 = self._find_form('f_101')
+        
         if f_101 is None:
             return pd.DataFrame()
 
@@ -97,10 +104,10 @@ class Bank:
             page = urlopen(url).read()
             soup = BeautifulSoup(page,'html.parser')
 
+            table = pd.read_html(page)[1]
             # For two case of form view
             if 'Код' in soup.find('h2').text:
 
-                table = pd.read_html(page)[1]
                 table = table.dropna()
                 table = table.drop([3], axis=0)
                 table.index = table[0]
@@ -111,7 +118,6 @@ class Bank:
 
             elif 'Форма' in soup.find('h2').text:
 
-                table = pd.read_html(page)[1]
                 table = table.drop([0,1,2], axis=0).fillna(0)
                 table[2] = table[2].map(to_number) + table[3].map(to_number)
                 table.index = table[1]

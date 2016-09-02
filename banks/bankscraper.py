@@ -11,16 +11,14 @@ from urllib.request import urlopen
 from .bank import Bank
 
 
-class BanksScraper:
+class BankScraper:
     """
     Scrap closed banks data from banki.ru
     """
 
-    def __init__(self):
-        self._n = cpu_count()
+    def __init__(self, processes=cpu_count()):
+        self._n = processes
         print("Pool size:",self._n)
-        self.closed_banks = None
-        self.active_banks = None
 
     def _get_closing_info(self, url):
         """Gather info about closed banks from a single page"""
@@ -85,7 +83,8 @@ class BanksScraper:
         with Pool(processes=self._n) as pool:
             results = pool.map(
                 self._get_closing_info,
-                all_pages
+                all_pages,
+                chunksize=12,
                 )
 
         ## Cleaning up
@@ -99,7 +98,8 @@ class BanksScraper:
         with Pool(processes=self._n) as pool:
             results = pool.map(
                 self._get_description,
-                (bank.link for bank in self.closed_banks.itertuples(index=False))
+                (bank.link for bank in self.closed_banks.itertuples(index=False)),
+                chunksize=250,
                 )
 
         #### Cleaning up
@@ -121,7 +121,7 @@ class BanksScraper:
             on='license_number'
             )
 
-        print('Done! Time spent: %d sec.' % time.time()-start_time)
+        print('Done! Time spent: %d sec.' % (time.time()-start_time))
 
         return self
 
