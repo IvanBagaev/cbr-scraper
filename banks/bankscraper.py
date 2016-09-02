@@ -39,9 +39,9 @@ class BankScraper:
             index=[' '.join(dt.text.split()) for dt in bank_description.findAll('dt')]).T
 
         try:
-            description['index'] = bank_description.find('a')['href'][bank_description.find('a')['href'].find('=')+1:]
+            description['id'] = bank_description.find('a')['href'][bank_description.find('a')['href'].find('=')+1:]
         except TypeError:
-            description['index'] = -1
+            description['id'] = -1
 
         description['Номер лицензии'] = description['Номер лицензии'].map(lambda x: x.split()[0])
 
@@ -104,7 +104,7 @@ class BankScraper:
 
         #### Cleaning up
         closed_descriptions = pd.concat(results).fillna("")
-        closed_descriptions.columns = ['index',  'city','date_of_closing',
+        closed_descriptions.columns = ['id',  'city','date_of_closing',
                                        'name', 'license_number', 'full_name','reason',
                                        'reason_of_closing', 'reason_of_closing2', ]
         closed_descriptions['name'] = closed_descriptions['full_name'] + \
@@ -127,13 +127,13 @@ class BankScraper:
 
 
     def to_csv(self, path='../'):
-        self.closed_banks.to_csv(os.path.join(path,'closed_banks.csv'))
-        self.active_banks.to_csv(os.path.join(path,'active_banks.csv'))
+        self.closed_banks.to_csv(os.path.join(path,'closed_banks.csv'), index=False)
+        self.active_banks.to_csv(os.path.join(path,'active_banks.csv'), index=False)
 
     def from_csv(self, path='../'):
         """Allow to load banks DataFrame from csv"""
         self.closed_banks = pd.read_csv(os.path.join(path,'closed_banks.csv'))
-        self.active_banks = pd.read_csv(os.path.join(path,'closed_banks.csv'))
+        self.active_banks = pd.read_csv(os.path.join(path,'active_banks.csv'))
         return self
 
 
@@ -193,14 +193,16 @@ class BankScraper:
 
     @property
     def closed_banks_list(self):
-        """Returns list of Closed Bank class instances"""
-
+        """
+        Returns list of Closed Bank class instances.
+        Note: only banks with corrent index will be returned
+        """
         if self.closed_banks is None:
             raise ValueError('Closed banks should be loaded first!')
 
-        return [Bank(bank.index, bank.license_number, bank.full_name)
+        return [Bank(bank.id, bank.license_number, bank.bank)
                     for bank in self.closed_banks.itertuples(index=False)
-                        if bank.index > 0]
+                        if bank.id > 0]
 
     @property
     def active_banks_list(self):

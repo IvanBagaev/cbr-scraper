@@ -2,15 +2,11 @@
 from bs4 import BeautifulSoup
 from urllib.request import urlopen
 
-import pandas as pd
 import dateparser as dtparser
 
 from .utils import to_number
 
 BANK_PAGE_URL_PATTERN = "http://www.cbr.ru/credit/coinfo.asp?id=%s"
-
-
-
 
 class Bank:
     """
@@ -83,7 +79,7 @@ class Bank:
 
         """
         soup, f_101 = self._find_form('f_101')
-        
+
         if f_101 is None:
             return pd.DataFrame()
 
