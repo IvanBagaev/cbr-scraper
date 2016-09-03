@@ -8,7 +8,7 @@ from .utils import to_number
 
 BANK_PAGE_URL_PATTERN = "http://www.cbr.ru/credit/coinfo.asp?id=%s"
 
-class Bank:
+class Bank(object):
     """
 
 

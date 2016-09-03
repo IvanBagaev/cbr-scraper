@@ -11,7 +11,7 @@ from urllib.request import urlopen
 from .bank import Bank
 
 
-class BankScraper:
+class BankScraper(object):
     """
     Scrap closed banks data from banki.ru
     """
