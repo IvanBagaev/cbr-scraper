@@ -3,6 +3,9 @@ import os
 import pandas as pd
 import numpy as np
 
+from io import StringIO
+from .structures import FORM101
+
 
 class Account(object):
     """
@@ -65,8 +68,8 @@ class Form101(object):
     _STRUCTURE_PATH = 'forms/structures/form101.csv'
 
     def __init__(self, date, bank = None):
-        
-        self.struct = pd.read_csv(os.path.join(self._STRUCTURE_PATH))
+
+        self.struct = pd.read_csv(StringIO(FORM101))
 
         self.all_accounts = [Account(acc.number, acc.name, acc.account_type, acc.section, acc.part)
                              for acc in self.struct.itertuples(index=False)]
