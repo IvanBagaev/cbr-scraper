@@ -65,7 +65,6 @@ class Form101(object):
     Represents whole structure of a reporting form.
 
     """
-    _STRUCTURE_PATH = 'forms/structures/form101.csv'
 
     def __init__(self, date, bank = None):
 

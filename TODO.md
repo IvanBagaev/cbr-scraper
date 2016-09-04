@@ -1,5 +1,4 @@
-# Tasks To Do
+# Tasks to do
 
-- DRY in forms scrapping
-- Remove try/except from get_description
-- Try to make async loading
+- Classes for all reporting forms
+- Scrap forms in classes

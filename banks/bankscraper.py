@@ -84,7 +84,6 @@ class BankScraper(object):
             results = pool.map(
                 self._get_closing_info,
                 all_pages,
-                #chunksize=int(len(all_pages)/self._n),
                 )
 
         ## Cleaning up
@@ -92,7 +91,7 @@ class BankScraper(object):
         self.closed_banks.columns = ['index', 'bank', 'license_number',
                                      'reason', 'date_of_closing', 'city','link']
         self.closed_banks = self.closed_banks.drop('index', axis=1).drop_duplicates('license_number')
-        print(self.closed_banks.shape)
+
         print('Done! Time spent: %d sec.' % (time.time()-start_time))
         start_time = time.time()
         ### scrapping bank's descriptions from memory book on banki.ru
@@ -101,7 +100,6 @@ class BankScraper(object):
             results = pool.map(
                 self._get_description,
                 (bank.link for bank in self.closed_banks.itertuples(index=False)),
-                #chunksize=int(len(self.closed_banks)/self._n),
                 )
         #### Cleaning up
         closed_descriptions = pd.concat(results).fillna("")
@@ -126,7 +124,7 @@ class BankScraper(object):
             closed_descriptions,
             on='license_number',
             )
-        print(self.closed_banks.shape)
+
         print('Done! Time spent: %d sec.' % (time.time()-start_time))
 
         return self
