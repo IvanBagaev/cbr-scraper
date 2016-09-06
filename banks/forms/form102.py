@@ -83,9 +83,9 @@ class Form102(FormUnit):
 
     def __init__(self, bank):
 
-        self.struct = pd.read_csv(StringIO(FORM102))
+        self.struct = pd.read_csv(StringIO(FORM102)).fillna('Далее')
         self.bank = bank
-        self.symbols = [Symbol(acc.number, acc.name, acc.chaper,
+        self.symbols = [Symbol(acc.number, acc.name, acc.chapter,
                                acc.part, acc.section, acc.subsection)
                              for acc in self.struct.itertuples(index=False)]
         for ch in self.struct.chapter.unique():
@@ -97,7 +97,7 @@ class Form102(FormUnit):
                     for ss in self.struct.subsection.unique():
                         subsection = FormUnit(self.bank, self.date)
                         subsection.symbols = [acc for acc in self.symbols if acc.subsection == ss]
-                        setattr(part, s, section)
+                        setattr(section, ss, subsection)
                         section.symbols.extend(subsection.symbols)
                     setattr(part, s, section)
                     part.symbols.extend(section.symbols)
