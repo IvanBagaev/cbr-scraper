@@ -8,7 +8,7 @@ Python package for scrapping bank's data from cbr.ru
 
 ## Dependencies
 
-pandas, dateparser, bs4
+pandas, numpy, dateparser, bs4
 
 ## Using
 

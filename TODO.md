@@ -1,4 +1,4 @@
 # Tasks to do
 
 - Classes for all reporting forms
-- fix assets/... sum 
+- Check for form is filled

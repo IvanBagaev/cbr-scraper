@@ -34,7 +34,8 @@ class FormUnit(object):
     Allow access to related accounts.
 
     """
-    def __init__(self, bank=None,date=None):
+    def __init__(self, form):
+        self.form = form
         self.accounts = []
 
     def assets_sum(self):
@@ -69,8 +70,8 @@ class FormUnit(object):
     def to_dataframe(self):
         df = pd.DataFrame([acc.balance for acc in self.accounts]).T
         df.columns = [acc.number for acc in self.accounts]
-        df['date'] = self.date
-        df['bank'] = self.bank.bank_id
+        df['date'] = self.form.date
+        df['bank'] = self.form.bank.bank_id
         return df
 
 class Form101(FormUnit):
@@ -79,6 +80,7 @@ class Form101(FormUnit):
 
     """
     date = None
+    is_filled = False
 
     def __init__(self, bank):
 
@@ -88,9 +90,9 @@ class Form101(FormUnit):
                              for acc in self.struct.itertuples(index=False)]
 
         for s in self.struct.section.unique():
-            section = FormUnit(self.bank, self.date)
+            section = FormUnit(self)
             for p in self.struct.part.unique():
-                part = FormUnit(self.bank, self.date)
+                part = FormUnit(self)
                 part.accounts = [acc for acc in self.accounts if acc.part == p]
                 setattr(section, p, part)
                 section.accounts.extend(part.accounts)
@@ -98,7 +100,7 @@ class Form101(FormUnit):
 
 
 
-    def fill(self, first_n,):
+    def fill(self, first_n=None):
         """
         Fill an empty initialized form with values. Load first n forms from
         cbr.ru site (2016->2015->...)
@@ -159,5 +161,5 @@ class Form101(FormUnit):
         self.date = f_101.date.values
         for acc in self.accounts:
             acc.balance = f_101[str(acc.number)].values
-
+        self.is_filled = True
         return self

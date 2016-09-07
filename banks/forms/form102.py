@@ -26,7 +26,7 @@ class Symbol(object):
         self.balance = [balance]
 
     def __repr__(self):
-        return "{0} ({1}) - {2}".format(self.number, self.name)
+        return "({0}) - {1}".format(self.number, self.name)
 
 
 class FormUnit(object):
@@ -35,26 +35,9 @@ class FormUnit(object):
     Allow access to related symbols.
 
     """
-    def __init__(self, bank=None,date=None):
+    def __init__(self, form):
+        self.form = form
         self.symbols = []
-
-    def income_sum(self):
-        """Returns the amount of assets in this unit"""
-        return np.sum([acc.balance for acc in self.assets])
-
-    def expenses_sum(self):
-        """Returns the amount of liabilities in this unit"""
-        return np.sum([acc.balance for acc in self.liabilities])
-
-    @property
-    def incomes(self):
-        """Returns list of assets symbols in this section or part"""
-        return [acc for acc in self.symbols if acc.chaper == 'Доходы']
-
-    @property
-    def expenses(self):
-        """Returns list of liabilities symbols in this section or part"""
-        return [acc for acc in self.symbols if acc.chaper == 'Расходы']
 
     @property
     def symbols_numbers(self):
@@ -66,12 +49,15 @@ class FormUnit(object):
         """Returns list of symbol's names"""
         return [acc.name for acc in self.symbols]
 
+    def sum(self):
+        """Return sum of all symbols in this unit"""
+        return np.sum([s.balance for s in self.symbols])
 
     def to_dataframe(self):
         df = pd.DataFrame([acc.balance for acc in self.symbols]).T
         df.columns = [acc.number for acc in self.symbols]
-        df['date'] = self.date
-        df['bank'] = self.bank.bank_id
+        df['date'] = self.form.date
+        df['bank'] = self.form.bank.bank_id
         return df
 
 class Form102(FormUnit):
@@ -80,6 +66,7 @@ class Form102(FormUnit):
 
     """
     date = None
+    is_filled = False
 
     def __init__(self, bank):
 
@@ -89,13 +76,13 @@ class Form102(FormUnit):
                                acc.part, acc.section, acc.subsection)
                              for acc in self.struct.itertuples(index=False)]
         for ch in self.struct.chapter.unique():
-            chapter = FormUnit(self.bank, self.date)
-            for p in self.struct.part.unique():
-                part = FormUnit(self.bank, self.date)
-                for s in self.struct.section.unique():
-                    section = FormUnit(self.bank, self.date)
-                    for ss in self.struct.subsection.unique():
-                        subsection = FormUnit(self.bank, self.date)
+            chapter = FormUnit(self)
+            for p in self.struct.query('chapter == @ch').part.unique():
+                part = FormUnit(self)
+                for s in self.struct.query('part == @p').section.unique():
+                    section = FormUnit(self)
+                    for ss in self.struct.query('section == @s').subsection.unique():
+                        subsection = FormUnit(self)
                         subsection.symbols = [acc for acc in self.symbols if acc.subsection == ss]
                         setattr(section, ss, subsection)
                         section.symbols.extend(subsection.symbols)
@@ -107,66 +94,63 @@ class Form102(FormUnit):
 
 
 
-    def fill(self, first_n,):
+    def fill(self, first_n=None):
         """
         Fill an empty initialized form with values. Load first n forms from
         cbr.ru site (2016->2015->...)
 
         """
-        soup, f_101 = self.bank._find_form('f_101')
+        soup = self.bank._open_bank_page()
 
-        if f_101 is None:
+        reports =  soup.find('div' , {'class':'reports'})
+        f_102 = reports.find('div', {'id':'f_102'})
+
+        if f_102 is None:
             return pd.DataFrame()
 
         # Get list of reporting dates
         dates = []
-        for el in f_101.find('div',{'class':'switched'}).findAll('div',{'class':'normal'}):
+        for el in f_102.find('div',{'class':'switched'}).findAll('div',{'class':'normal'}):
             year = el['id'][-4:]
             dates.extend([dtparser.parse(a.text[3:] + ' ' + year) for a in el.findAll('a')])
 
-        urls = [('http://www.cbr.ru/credit/'+a['href']) for a in f_101.findAll('a')]
+
+        f_102 = f_102.findAll('a')
+
+        urls = [('http://www.cbr.ru/credit/'+a['href']) for a in f_102]
 
         if first_n is None:
             first_n = len(urls)
+        f_102 = pd.DataFrame()
 
-        f_101 = pd.DataFrame()
-
-        for url, date in zip(urls[:first_n], dates):
+        for url, date in zip(urls[:first_n], dates[:first_n]):
             page = urlopen(url).read()
             soup = BeautifulSoup(page,'html.parser')
 
             table = pd.read_html(page)[1]
-            # For two case of form view
-            if 'Код' in soup.find('h2').text:
 
-                table = table.dropna()
-                table = table.drop([3], axis=0)
-                table.index = table[0]
-                table = table[[12]]
-                table.columns = ['balance']
-                table['date'] = date
-                table.rename(index={12:'number'}, inplace=True)
+            if len(table.columns) > 3:
+                table = table[[2,5]].dropna()
+                table = table.drop(2)
+                table.columns = ['symbol', 'balance']
+            elif len(table.columns) == 3:
+                table = table[[1,2]].dropna()
+                table = table.drop(0)
+                table.columns = ['symbol', 'balance']
 
-            elif 'Форма' in soup.find('h2').text:
+            table['date'] = date
+            f_102 = pd.concat([f_102, table])
 
-                table = table.drop([0,1,2], axis=0).fillna(0)
-                table[2] = table[2].map(to_number) + table[3].map(to_number)
-                table.index = table[1]
-                table = table[[2]]
-                table.columns = ['balance']
-                table['date'] = date
-                table.rename(index={0:'number'}, inplace=True)
+        f_102.columns = ['symbol', 'balance','date']
 
-            f_101 = pd.concat([f_101, table])
+        f_102.balance = f_102.balance.map(to_number)
 
-        f_101 = f_101.reset_index()
-        f_101.columns = ['number', 'balance','date']
-        f_101.balance = f_101.balance.map(to_number)
-        f_101 = f_101.groupby(['date','number'])['balance'].agg('sum').unstack().reset_index().fillna(0)
-        f_101['index'] = self.bank.bank_id
+        f_102 = f_102.groupby(['date','symbol'])['balance'].agg('sum').unstack().reset_index().fillna(0)
+        f_102['index'] = self.bank.bank_id
 
-        self.date = f_101.date.values
+
+        self.date = f_102.date.values
         for acc in self.symbols:
-            acc.balance = f_101[str(acc.number)].values
-
+            acc.balance = f_102[str(acc.number)].values
+        self.is_filled = True
         return self
