@@ -72,61 +72,6 @@ class Bank(object):
         return soup, form
 
 
-    def get_form102(self, first_n=None):
-        """
-
-        """
-
-        soup = self._open_bank_page()
-
-        reports =  soup.find('div' , {'class':'reports'})
-        f_102 = reports.find('div', {'id':'f_102'})
-
-        if f_102 is None:
-            return pd.DataFrame()
-
-        # Get list of reporting dates
-        dates = []
-        for el in f_102.find('div',{'class':'switched'}).findAll('div',{'class':'normal'}):
-            year = el['id'][-4:]
-            dates.extend([dtparser.parse(a.text[3:] + ' ' + year) for a in el.findAll('a')])
-
-
-        f_102 = f_102.findAll('a')
-
-        urls = [('http://www.cbr.ru/credit/'+a['href']) for a in f_102]
-
-        if first_n is None:
-            first_n = len(urls)
-        f_102 = pd.DataFrame()
-
-        for url, date in zip(urls[:first_n], dates[:first_n]):
-            page = urlopen(url).read()
-            soup = BeautifulSoup(page,'html.parser')
-
-            table = pd.read_html(page)[1]
-
-            if len(table.columns) > 3:
-                table = table[[2,5]].dropna()
-                table = table.drop(2)
-                table.columns = ['symbol', 'balance']
-            elif len(table.columns) == 3:
-                table = table[[1,2]].dropna()
-                table = table.drop(0)
-                table.columns = ['symbol', 'balance']
-
-            table['date'] = date
-            f_102 = pd.concat([f_102, table])
-
-        f_102.columns = ['symbol', 'balance','date']
-
-        f_102.balance = f_102.balance.map(to_number)
-
-        f_102 = f_102.groupby(['date','symbol'])['balance'].agg('sum').unstack().reset_index().fillna(0)
-        f_102['index'] = self.bank_id
-
-        return f_102
-
     def get_form123(self, first_n = None, form_type='f_123'):
         """
         Also can be used to get form 134, passing form_type = 'f_134' as argument

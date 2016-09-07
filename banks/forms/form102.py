@@ -14,7 +14,7 @@ from .structures import FORM102
 
 class Symbol(object):
     """
-    Represents particular sub-ledger symbol.
+    Represents particular symbol.
     """
     def __init__(self, number, name, chaper,part,section,subsection, balance=0):
         self.number = number
@@ -63,6 +63,8 @@ class FormUnit(object):
 class Form102(FormUnit):
     """
     Represents whole structure of a reporting form.
+
+    Can store data for multiple dates
 
     """
     date = None

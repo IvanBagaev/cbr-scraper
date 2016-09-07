@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 from urllib.request import urlopen
 
 from .bank import Bank
-
+from .forms import Form101, Form102
 
 class BankScraper(object):
     """
@@ -169,7 +169,7 @@ class BankScraper(object):
                                                   bank.bank_id, bank.name), end=' ')
             # TODO: DRY
             print('Form 101...', end = ' ')
-            f_101 = bank.get_form101(first_n)
+            f_101 = Form101(bank).fill(first_n).to_dataframe()
             form_101 = pd.concat([form_101,f_101])
 
             print('Form 102...', end = ' ')
