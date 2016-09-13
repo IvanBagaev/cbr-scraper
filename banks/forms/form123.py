@@ -17,7 +17,7 @@ class Section(object):
     """
     Represents particular symbol.
     """
-    def __init__(self, number, name, chaper,part,section,subsection, balance=0):
+    def __init__(self, number, name,  balance=0):
         self.number = number
         self.name = name
         self.balance = [balance]
@@ -34,22 +34,22 @@ class FormUnit(object):
     """
     def __init__(self, form):
         self.form = form
-        self.symbols = []
+        self.sections = []
 
     @property
     def symbols_numbers(self):
         """Returns list of symbol's numbers"""
-        return [acc.number for acc in self.symbols]
+        return [acc.number for acc in self.sections]
 
     @property
     def symbols_names(self):
         """Returns list of symbol's names"""
-        return [acc.name for acc in self.symbols]
+        return [acc.name for acc in self.sections]
 
 
     def to_dataframe(self):
-        df = pd.DataFrame([acc.balance for acc in self.symbols]).T
-        df.columns = [acc.number for acc in self.symbols]
+        df = pd.DataFrame([acc.balance for acc in self.sections]).T
+        df.columns = [acc.number for acc in self.sections]
         df['date'] = self.form.date
         df['bank'] = self.form.bank.bank_id
         return df
@@ -68,12 +68,9 @@ class Form123(FormUnit):
 
         self.struct = pd.read_csv(StringIO(FORM123))
         self.bank = bank
-        self.section = [Section(acc.number, acc.name)
+        self.sections = [Section(acc.number, acc.name)
                         for acc in self.struct.itertuples(index=False)]
-        for ch in self.struct.chapter.unique():
-            chapter = FormUnit(self)
-            setattr(self, ch, chapter)
-
+        self.form = self
 
 
     def fill(self, first_n=None):
@@ -82,10 +79,7 @@ class Form123(FormUnit):
         cbr.ru site (2016->2015->...)
 
         """
-        soup = self.bank._open_bank_page()
-
-        reports =  soup.find('div' , {'class':'reports'})
-        f_123 = reports.find('div', {'id':form_type})
+        soup, f_123 = self.bank._find_form('f_123')
 
         if f_123 is None:
             return pd.DataFrame()
@@ -123,11 +117,14 @@ class Form123(FormUnit):
         f_123.balance = f_123.balance.map(to_number)
 
         f_123 = f_123.groupby(['date','symbol'])['balance'].agg('sum').unstack().reset_index().fillna(0)
-        f_123['index'] = self.bank_id
+        f_123['index'] = self.bank.bank_id
 
-
+        #return f_123
         self.date = f_123.date.values
         for acc in self.sections:
-            acc.balance = f_123[str(acc.number)].values
+            try:
+                acc.balance = f_123[str(acc.number)].values
+            except KeyError:
+                acc.balance = np.zeros(first_n)
         self.is_filled = True
         return self
