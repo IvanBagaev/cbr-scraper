@@ -9,11 +9,11 @@ from bs4 import BeautifulSoup
 from io import StringIO
 
 from ..utils import to_number
-from .structures import FORM123
+from .structures import FORM123, FORM134
 
 
 
-class Section(object):
+class Section:
     """
     Represents particular symbol.
     """
@@ -26,7 +26,7 @@ class Section(object):
         return "({0}) - {1}".format(self.number, self.name)
 
 
-class FormUnit(object):
+class FormUnit:
     """
     Represents unit of reporting form's structure.
     Allow access to related symbols.
@@ -60,16 +60,24 @@ class Form123(FormUnit):
 
     Can store data for multiple dates
 
+
+    Also can be used to get form 134, passing form_type = 'f_134' as argument
+
+
     """
     date = None
     is_filled = False
 
-    def __init__(self, bank):
-
-        self.struct = pd.read_csv(StringIO(FORM123))
+    def __init__(self, bank, form_type='f_123'):
+        self.form_type = form_type
+        if self.form_type == 'f_123':
+            self.struct = pd.read_csv(StringIO(FORM123))
+        elif self.form_type == 'f_134':
+            self.struct = pd.read_csv(StringIO(FORM134))
         self.bank = bank
         self.sections = [Section(acc.number, acc.name)
                         for acc in self.struct.itertuples(index=False)]
+
         self.form = self
 
 
@@ -79,7 +87,7 @@ class Form123(FormUnit):
         cbr.ru site (2016->2015->...)
 
         """
-        soup, f_123 = self.bank._find_form('f_123')
+        soup, f_123 = self.bank._find_form(self.form_type)
 
         if f_123 is None:
             return pd.DataFrame()
@@ -90,12 +98,9 @@ class Form123(FormUnit):
             year = el['id'][-4:]
             dates.extend([dtparser.parse(a.text[3:] + ' ' + year) for a in el.findAll('a')])
 
+        urls = [('http://www.cbr.ru/credit/'+a['href']).replace('®','&reg') for a in f_123.findAll('a')]
 
-        f_123 = f_123.findAll('a')
-
-        urls = [('http://www.cbr.ru/credit/'+a['href']).replace('®','&reg') for a in f_123]
-
-        if first_n is None:
+        if not first_n or first_n > len(urls):
             first_n = len(urls)
         f_123 = pd.DataFrame()
 

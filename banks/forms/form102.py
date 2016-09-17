@@ -12,7 +12,7 @@ from ..utils import to_number
 from .structures import FORM102
 
 
-class Symbol(object):
+class Symbol:
     """
     Represents particular symbol.
     """
@@ -29,7 +29,7 @@ class Symbol(object):
         return "({0}) - {1}".format(self.number, self.name)
 
 
-class FormUnit(object):
+class FormUnit:
     """
     Represents unit of reporting form's structure.
     Allow access to related symbols.
@@ -94,6 +94,7 @@ class Form102(FormUnit):
                 chapter.symbols.extend(part.symbols)
             setattr(self, ch, chapter)
 
+        self.form = self
 
 
     def fill(self, first_n=None):
@@ -107,21 +108,22 @@ class Form102(FormUnit):
         reports =  soup.find('div' , {'class':'reports'})
         f_102 = reports.find('div', {'id':'f_102'})
 
-        if f_102 is None:
+        if not f_102:
             return pd.DataFrame()
 
         # Get list of reporting dates
         dates = []
         for el in f_102.find('div',{'class':'switched'}).findAll('div',{'class':'normal'}):
             year = el['id'][-4:]
-            dates.extend([dtparser.parse(a.text[3:] + ' ' + year) for a in el.findAll('a')])
+            dates.extend([dtparser.parse(a.text[3:] + ' ' + year)
+                          for a in el.findAll('a')])
 
 
         f_102 = f_102.findAll('a')
 
         urls = [('http://www.cbr.ru/credit/'+a['href']) for a in f_102]
 
-        if first_n is None:
+        if not first_n or first_n > len(urls):
             first_n = len(urls)
         f_102 = pd.DataFrame()
 
@@ -153,6 +155,9 @@ class Form102(FormUnit):
 
         self.date = f_102.date.values
         for acc in self.symbols:
-            acc.balance = f_102[str(acc.number)].values
+            try:
+                acc.balance = f_102[str(acc.number)].values
+            except KeyError:
+                acc.balance = np.zeros(first_n)
         self.is_filled = True
         return self

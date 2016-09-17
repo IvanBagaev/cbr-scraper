@@ -12,7 +12,7 @@ from ..utils import to_number
 from .structures import FORM101
 
 
-class Account(object):
+class Account:
     """
     Represents particular sub-ledger account.
     """
@@ -28,7 +28,7 @@ class Account(object):
         return "{0} ({1}) - {2}".format(self.number, self.account_type, self.name)
 
 
-class FormUnit(object):
+class FormUnit:
     """
     Represents unit of reporting form's structure.
     Allow access to related accounts.
@@ -97,8 +97,7 @@ class Form101(FormUnit):
                 setattr(section, p, part)
                 section.accounts.extend(part.accounts)
             setattr(self, s, section)
-
-
+        self.form = self
 
     def fill(self, first_n=None):
         """
@@ -108,7 +107,7 @@ class Form101(FormUnit):
         """
         soup, f_101 = self.bank._find_form('f_101')
 
-        if f_101 is None:
+        if not f_101:
             return pd.DataFrame()
 
         # Get list of reporting dates
@@ -119,7 +118,7 @@ class Form101(FormUnit):
 
         urls = [('http://www.cbr.ru/credit/'+a['href']) for a in f_101.findAll('a')]
 
-        if first_n is None:
+        if not first_n or first_n > len(urls):
             first_n = len(urls)
 
         f_101 = pd.DataFrame()
@@ -160,6 +159,9 @@ class Form101(FormUnit):
 
         self.date = f_101.date.values
         for acc in self.accounts:
-            acc.balance = f_101[str(acc.number)].values
+            try:
+                acc.balance = f_101[str(acc.number)].values
+            except KeyError:
+                acc.balance = np.zeros(first_n)
         self.is_filled = True
         return self
