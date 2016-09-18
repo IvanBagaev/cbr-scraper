@@ -1,15 +1,18 @@
-# CBR scrapper
-Python package for scrapping bank's data from cbr.ru
+# CBR scraper
+Пакет для получения данных с сайта ЦБРФ с помощью BeautifulSoup и Pandas.
 
-## Features
+## Возможности
 
-- Allow to get dataframes of closed and active Banks
-- Allow to get reporting forms (101, 102, 123, 134, 135). Now in raw format.
+- Получение списка активных банков cbr.ru
+- Получение списков закрытых банков banki.ru
+- Получение форм отчётности - 101, 102, 123, 134, 135
 
-## Dependencies
+Для каждой из форм реализован класс, позволяющий выбирать только необходимые показатели.
+
+## Зависимости
 
 pandas, numpy, dateparser, bs4
 
-## Using
+## Использование
 
-See testing_example.ipynb
+Смотри example_rus.ipynb
