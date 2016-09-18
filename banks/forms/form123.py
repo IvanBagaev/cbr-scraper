@@ -48,6 +48,7 @@ class FormUnit:
 
 
     def to_dataframe(self):
+        """Convert form to pandas DataFrame format"""
         df = pd.DataFrame([acc.balance for acc in self.sections]).T
         df.columns = [acc.number for acc in self.sections]
         df['date'] = self.form.date
