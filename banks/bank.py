@@ -53,13 +53,12 @@ class Bank:
 
         """
 
-        soup = _open_bank_page()
+        soup = self._open_bank_page()
 
         main_info = pd.read_html(str(soup.find('table')))[0]
         main_info.index = main_info[0]
         main_info = main_info.drop(0, axis=1).T
         main_info['id'] = [self.bank_id]
-        main_info['Работающий на сегодня'] = ['да'] # TODO: write a check for this !
 
         return main_info
 
